@@ -32,18 +32,6 @@ rake "gems:install", :sudo => true
 # APP
 #====================
 
-file 'app/views/page/index.html.erb',
-%q{<% content_for :sidebar do %> 
-<ul class="nav">
-  <li>Navigation item 1</li>
-  <li>Navigation item 2</li>
-  <li>Navigation item 3</li>
-</ul>
-<% end -%>
-<h1>Page#index</h1>
-<p>Find me in app/views/page/index.html.erb</p>
-}
-
 file 'app/views/layouts/_flashes.html.erb', 
 %q{<div id="flash">
   <% flash.each do |key, value| -%>
@@ -57,6 +45,14 @@ file 'app/helpers/application_helper.rb',
   def body_class
     "#{controller.controller_name} #{controller.controller_name}-#{controller.action_name}"
   end
+  
+  def set_html_title(str="")
+    unless str.blank?
+      content_for :html_title do
+       "&mdash; #{str} "
+      end
+    end
+  end
 end
 }
 
@@ -66,7 +62,7 @@ file 'app/views/layouts/application.html.erb',
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
   <head>
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <title>TITLE</title>
+    <title>Code7 Interactive <%= (html_title = yield :html_title) ? html_title : '&mdash; Default text here...' %></title>
     <%= stylesheet_link_tag 'reset-fonts-grids', 'content', :media => 'all', :cache => true %>
     <%= javascript_include_tag ['jquery', 'application'], :cache => true %>
   </head>
@@ -76,29 +72,27 @@ file 'app/views/layouts/application.html.erb',
         <img src="http://c7.se/images/logo.png" alt="Code7 Interactive"/>
       </div>
       <div id="bd">
-        <div class="yui-gf">
-          <div role="sidebar" class="yui-u first">
-    	      <%= yield :sidebar %>
-    	    </div>
-          <div role="main" class="yui-u">
-            <%= pluralize User.logged_in.count, "user" %> <%= t(:currently_logged_in) %><br /> 
-            <!-- This based on last_request_at, if they were active < 10 minutes they are logged in -->
-            <br />
-
+        <%= render :partial => 'layouts/flashes' -%>
+        <div class="yui-ge">
+          <div role="main" class="yui-u first">
             <% if !current_user %>
               <%= link_to t(:register), new_account_path %> |
               <%= link_to t(:login), new_user_session_path %> |
             <% else %>
               <%= link_to t(:my_account), account_path %> |
-              <%= link_to t(:logout), user_session_path, :method => :delete, :confirm => t(:sure_you_want_to_logout) %>
+              <%= link_to t(:logout), user_session_path, :method => :delete %>
             <% end %>
-          
-    	      <%= render :partial => 'layouts/flashes' -%>
             <%= yield %>
     	    </div>
+    	    <div class="yui-u" role="sidebar"><%= yield :sidebar %></div>
         </div>
       </div>
-      <div id="ft" role="contentinfo"><p><%= t(:footer) %></p></div>
+      <div id="ft" role="contentinfo">
+        <p>
+          <%= t(:footer) %> | 
+          <%= pluralize User.logged_in.count, "user" %> <%= t(:currently_logged_in) %>
+        </p>
+      </div>
     </div>
   </body>
 </html>
@@ -137,6 +131,9 @@ em{font-style: italic;}
 strong{font-weight:bold;}
 hr{border: 5px solid #BCBCBC; border-width: 0 0 5px 0; margin: 20px 20px 0 20px;}
 code{color:#0B8C8F;}
+/* ====== Flash messages ====== */
+#flash div {margin: 10px auto; padding: 5px;}
+#flash_notice {background: #FFF6BF; border-top: 2px solid #FFD324; border-bottom: 2px solid #FFD324;}
 /* ====== Headings ====== */
 /* .h1-.h6 classes should be used to maintain the semantically appropriate heading levels - NOT for use on non-headings */
 h1, .h1{font-size:196%;  font-weight:normal; font-style: normal; color:#7CAF3C;}
@@ -196,7 +193,7 @@ run "cp config/database.yml config/example_database.yml"
 ##
 
 generate :session, "user_session"
-generate :controller, "user_sessions"
+generate :rspec_controller, "user_sessions"
 
 run "rm app/helpers/user_sessions_helper.rb"
 
@@ -214,7 +211,7 @@ file 'app/controllers/user_sessions_controller.rb',
   def create
     @user_session = UserSession.new(params[:user_session])
     if @user_session.save
-      flash[:notice] = "Login successful!"
+      flash[:notice] = t(:login_successful)
       redirect_back_or_default account_url
     else
       render :action => :new
@@ -223,7 +220,7 @@ file 'app/controllers/user_sessions_controller.rb',
   
   def destroy
     current_user_session.destroy
-    flash[:notice] = "Logout successful!"
+    flash[:notice] = t(:logout_successful)
     redirect_back_or_default new_user_session_url
   end
 end
@@ -238,7 +235,8 @@ generate :rspec_scaffold, "user login:string crypted_password:string " +
                          "password_salt:string persistence_token:string " +
                          "login_count:integer last_request_at:datetime " + 
                          "last_login_at:datetime current_login_at:datetime " +
-                         "last_login_ip:string current_login_ip:string"
+                         "last_login_ip:string current_login_ip:string " +
+                         "perishable_token:string email:string"
 
 # Remove the users layout, scaffold css and helper
 run "rm app/views/layouts/users.html.erb"
@@ -252,7 +250,90 @@ rake "db:migrate"
 file 'app/models/user.rb',
 %q{class User < ActiveRecord::Base
   acts_as_authentic
+  
+  def deliver_password_reset_instructions!
+    reset_perishable_token!
+    Notifier.deliver_password_reset_instructions(self)
+  end
 end
+}
+
+file 'app/models/notifier.rb',
+%q{class Notifier < ActionMailer::Base
+  default_url_options[:host] = "c7.se"
+  
+  def password_reset_instructions(user)
+    subject I18n.t(:password_reset_instructions)
+    from I18n.t(:notifier_email)
+    recipients user.email
+    sent_on Time.now
+    body :edit_password_reset_url => edit_password_reset_url(user.perishable_token)
+  end
+end
+}
+
+generate :rspec_controller, "password_resets"
+
+file 'app/controllers/password_resets_controller.rb',
+%q{class PasswordResetsController < ApplicationController
+  before_filter :load_user_using_perishable_token, :only => [:edit, :update]
+  before_filter :require_no_user
+  
+  def new
+    render
+  end
+  
+  def create
+    @user = User.find_by_email(params[:email])
+    if @user
+      @user.deliver_password_reset_instructions!
+      flash[:notice] = "Instructions to reset your password have been emailed to you. " +
+        "Please check your email."
+      redirect_to root_url
+    else
+      flash[:notice] = "No user was found with that email address"
+      render :action => :new
+    end
+  end
+  
+  def edit
+    render
+  end
+ 
+  def update
+    @user.password = params[:user][:password]
+    @user.password_confirmation = params[:user][:password_confirmation]
+    if @user.save
+      flash[:notice] = "Password successfully updated"
+      redirect_to account_url
+    else
+      render :action => :edit
+    end
+  end
+ 
+  private
+    def load_user_using_perishable_token
+      @user = User.find_using_perishable_token(params[:id])
+      unless @user
+        flash[:notice] = "We're sorry, but we could not locate your account." +
+          "If you are having issues try copying and pasting the URL " +
+          "from your email into your browser or restarting the " +
+          "reset password process."
+        redirect_to root_url
+      end
+    end
+end
+}
+
+file 'app/views/notifier/password_reset_instructions.erb',
+%q{A request to reset your password has been made.
+If you did not make this request, simply ignore this email.
+If you did make this request just click the link below:
+
+<%= @edit_password_reset_url %>
+
+If the above URL does not work try copying and pasting it into your browser.
+If you continue to have problem please feel free to contact us.
 }
 
 ##
@@ -370,7 +451,8 @@ file 'app/views/password_resets/edit.html.erb',
 }
 
 file 'app/views/password_resets/new.html.erb',
-%q{<h1><%= t(:forgot_password)%></h1>
+%q{<% set_html_title(t(:forgot_password)) -%>
+<h1><%= t(:forgot_password)%></h1>
  
 <p><%= t(:forgot_password_instruction)%></p>
  
@@ -383,7 +465,8 @@ file 'app/views/password_resets/new.html.erb',
 }
 
 file 'app/views/user_sessions/new.html.erb',
-%q{<h1><%= t(:login) %></h1>
+%q{<% set_html_title(t(:login)) -%>
+<h1><%= t(:login) %></h1>
  
 <% form_for @user_session, :url => user_session_path do |f| %>
   <%= f.error_messages %>
@@ -404,6 +487,9 @@ file 'app/views/users/_form.erb',
 %q{<%= form.label t(:login) %><br />
 <%= form.text_field :login %><br />
 <br />
+<%= form.label :email %><br />
+<%= form.text_field :email %><br />
+<br />
 <%= form.label t(:password), form.object.new_record? ? nil : t(:change_password) %><br />
 <%= form.password_field :password %><br />
 <br />
@@ -413,7 +499,8 @@ file 'app/views/users/_form.erb',
 }
 
 file 'app/views/users/edit.html.erb',
-%q{<h1><%= t(:edit_my_account) %></h1>
+%q{<% set_html_title(t(:edit_my_account)) -%>
+<h1><%= t(:edit_my_account) %></h1>
  
 <% form_for @user, :url => account_path do |f| %>
   <%= f.error_messages %>
@@ -425,7 +512,8 @@ file 'app/views/users/edit.html.erb',
 }
 
 file 'app/views/users/new.html.erb',
-%q{<h1><%= t(:register) %></h1>
+%q{<% set_html_title(t(:register)) -%>
+<h1><%= t(:register) %></h1>
  
 <% form_for @user, :url => account_path do |f| %>
   <%= f.error_messages %>
@@ -435,7 +523,9 @@ file 'app/views/users/new.html.erb',
 }
 
 file 'app/views/users/show.html.erb',
-%q{<p>
+%q{<% set_html_title(@user.login) -%>
+<h1><%= @user.login %></h1>
+<p>
   <b><%= t(:login) %>:</b>
   <%=h @user.login %>
 </p>
@@ -484,26 +574,35 @@ file 'config/locales/en.yml',
   current_login_ip: "Current login ip"
   edit: "Edit"
   edit_my_account: "Edit my account"
+  email: "Email"
   footer: "Footer text"
+  forgot_password: "Forgot password?"
+  forgot_password_instruction: "..."
   last_login_at: "Last login at"
   last_login_ip: "Last login ip"
   last_request_at: "Last request at"
   login: "Login"
   login_count: "Login count"
+  login_successful: "Login successful!"
   logout: "Logout"
+  logout_successful: "Logout successful!"
   must_be_logged_in_to_access: "Must be logged in to access"
   must_be_logged_out_to_access: "Must be logged out to access"
   my_account: "My account"
   my_profile: "My profile"
+  notifier_email: "Code7 Notifier <noreply@c7.se>"
   password: "Password"
   password_confirmation: "Password confirmation"
+  password_reset_instructions: "Password Reset Instructions"
   register: "Register"
-  sure_you_want_to_logout: "Are you sure you want to logout?"
+  reset_password: "Reset password"
   update: "Update"
+  update_password_and_log_me_in: "Update the password and log me in"
 }
 
 # Setup the authentication routes
 route "map.resource :user_session"
+route "map.resources :password_resets"
 route "map.root :controller => 'user_sessions', :action => 'new'"
 
 # Add all files and do the initial commit
