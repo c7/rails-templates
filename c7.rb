@@ -129,7 +129,7 @@ file 'public/stylesheets/content.css',
 %q{/* **************** CONTENT OBJECTS ***************** */
 body {border-top:8px solid #7CAF3C;}
 /* ====== Default spacing ====== */
-h1, h2, h3, h4, h5, h6, ul, ol,dl, p, ul {padding:10px;}
+h1, h2, h3, h4, h5, h6, ul, ol,dl, p, ul {padding:10px 0;}
 pre{margin: 10px;}
 table h1,table h2,table h3, table h4, table h5, table h6, table p, table ul, table ol, table dl {padding:0;}
 /* ====== Elements ====== */
@@ -485,13 +485,15 @@ file 'config/locales/en.yml',
   last_request_at: "Last request at"
   login: "Login"
   login_count: "Login count"
+  logout: "Logout"
   must_be_logged_in_to_access: "Must be logged in to access"
   must_be_logged_out_to_access: "Must be logged out to access"
+  my_account: "My account"
   my_profile: "My profile"
   password: "Password"
   password_confirmation: "Password confirmation"
   register: "Register"
-  sure_you_want_to_log_out: "Are you sure you want to logout?"
+  sure_you_want_to_logout: "Are you sure you want to logout?"
   update: "Update"
 }
 
