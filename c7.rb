@@ -28,6 +28,9 @@ gem 'mislav-will_paginate', :lib => 'will_paginate', :source => 'http://gems.git
 # Install all the gems, as root
 rake "gems:install", :sudo => true
 
+# Generate the RSpec files
+generate :rspec
+
 #====================
 # APP
 #====================
