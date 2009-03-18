@@ -12,6 +12,7 @@ run "rm public/index.html"
 run "rm public/favicon.ico"
 run "rm public/robots.txt"
 run "rm -f public/javascripts/*"
+run "rm -f test/"
 
 #====================
 # GEMS
