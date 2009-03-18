@@ -243,9 +243,6 @@ generate :rspec_scaffold, "user login:string crypted_password:string " +
 run "rm app/views/layouts/users.html.erb"
 run "rm public/stylesheets/scaffold.css"
 
-# Apply the User migration
-rake "db:migrate"
-
 # Make the user act as authentic:
 file 'app/models/user.rb',
 %q{class User < ActiveRecord::Base
@@ -347,6 +344,15 @@ file 'app/controllers/users_controller.rb',
 %q{class UsersController < ApplicationController
   before_filter :require_no_user, :only => [:new, :create]
   before_filter :require_user, :only => [:show, :edit, :update]
+  
+  def index
+    @users = User.all
+    
+    respond_to do |format|
+      format.html # index.html.erb
+      format.xml  { render :xml => @users }
+    end
+  end
   
   def new
     @user = User.new
@@ -604,6 +610,9 @@ file 'config/locales/en.yml',
 route "map.resource :user_session"
 route "map.resources :password_resets"
 route "map.root :controller => 'user_sessions', :action => 'new'"
+
+# Apply the migrations
+rake "db:migrate"
 
 # Add all files and do the initial commit
 git :add => ".", :commit => "-m 'Initial commit'"
