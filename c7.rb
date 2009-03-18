@@ -198,8 +198,6 @@ run "cp config/database.yml config/example_database.yml"
 generate :session, "user_session"
 generate :rspec_controller, "user_sessions"
 
-run "rm app/helpers/user_sessions_helper.rb"
-
 
 # Fill the user sessions controller with default content
 file 'app/controllers/user_sessions_controller.rb',
@@ -244,7 +242,6 @@ generate :rspec_scaffold, "user login:string crypted_password:string " +
 # Remove the users layout, scaffold css and helper
 run "rm app/views/layouts/users.html.erb"
 run "rm public/stylesheets/scaffold.css"
-run "rm app/helpers/users_helper.rb"
 
 # Apply the User migration
 rake "db:migrate"
